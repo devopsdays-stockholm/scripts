@@ -25,14 +25,27 @@ sub MAIN(
     Bool :u(:$update) = False,
     Bool :d(:$dryrun) = False,
 ) {
-    my @get = 'curl', '-s', "https://api.trello.com/1/list/$listid/cards?key=$apikey&token=$token";
-    my $get = run @get, :out;
-    my $existing = from-json($get.out.lines);
+    my @getCards = 'curl', '-s', "https://api.trello.com/1/list/$listid/cards?key=$apikey&token=$token";
+    my $getCards = run @getCards, :out;
+    my $existing = from-json($getCards.out.lines);
     my %ids;
     for @$existing -> %cfp {
         my $title = %cfp<name>;
         die "duplicate title '$title' in existing data" if %ids{$title};
         %ids{$title} = '/' ~ %cfp<id>;
+    }
+    my @getList = 'curl', '-s', "https://api.trello.com/1/list/$listid?key=$apikey&token=$token";
+    my $getList = run @getList, :out;
+    my $boardid = from-json($getList.out.lines)<idBoard>;
+
+    my @getLabels = 'curl', '-s', "https://api.trello.com/1/boards/$boardid/labels?key=$apikey&token=$token";
+    my $getLabels = run @getLabels, :out;
+    my $labels = from-json($getLabels.out.lines);
+    my %labels;
+    for @$labels -> $label {
+        my $name = $label<name> || next;
+        $name ~~ /^ (\d+)/;
+        %labels{$0} = $label<id> if $0;
     }
 
     my $data = from-json(slurp $infile);
@@ -53,6 +66,8 @@ sub MAIN(
         my $bio = %cfp<bio>;
         my $format = %cfp<talk_format>;
         my $tags = %cfp<tags>.join(", ");
+        $format ~~ /(\d+)/;
+        my $labelId = %labels{$0} // '';
 
         $title ~~ s/ \s+ $ //;
         $organization ~= " - $location" unless $location eq "Unknown";
@@ -87,7 +102,14 @@ sub MAIN(
             say "Creating '$title'";
         }
 
-        my @curl = "curl", "-sX", $method, "-o", "/dev/null", "-w", '%{http_code}\n', "https://api.trello.com/1/cards$cardid?key=$apikey&token=$token", "-d", "idList=$listid", "--data-urlencode", "name=$title", "--data-urlencode", "desc=$cfp";
+        my @curl = (
+            "curl", "-sX", $method, "-o", "/dev/null", "-w", '%{http_code}\n',
+            "https://api.trello.com/1/cards$cardid?key=$apikey&token=$token",
+            "-d", "idList=$listid",
+            "-d", "idLabels=$labelId",
+            "--data-urlencode", "name=$title",
+            "--data-urlencode", "desc=$cfp",
+        );
         unshift @curl, 'echo' if  $dryrun;
         my $curl = run @curl, :out;
         say $curl.out.lines;
