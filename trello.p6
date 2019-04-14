@@ -14,8 +14,12 @@
 #
 
 use JSON::Tiny;
+use HTTP::UserAgent;
+
 my %*SUB-MAIN-OPTS = :named-anywhere;
 subset NonEmptyStr of Str where * ne '';
+my $cardsURL = "https://api.trello.com/1/cards";
+my $ua = HTTP::UserAgent.new;
 
 sub MAIN(
     Str $infile where *.IO.f,
@@ -95,27 +99,39 @@ sub MAIN(
         $cfp ~~ s:g/\n/\n/; # remove \r
         $cfp ~~ s/ \s+ $ //; # remove trailing whitespace
 
-        my $method;
-        if $cardid {
-            $method = "PUT";
-            next unless $update;
-            say "Updating '$title'";
-        } else {
-            $cardid = '';
-            $method = "POST";
-            say "Creating '$title'";
-        }
+        my $params = {
+            key => $apikey,
+            token => $token,
+            idList => $listid,
+            idLabels => $labelId,
+            name => $title,
+            desc => $cfp,
+        };
 
-        my @curl = (
-            "curl", "-sX", $method, "-o", "/dev/null", "-w", '%{http_code}\n',
-            "https://api.trello.com/1/cards$cardid?key=$apikey&token=$token",
-            "-d", "idList=$listid",
-            "-d", "idLabels=$labelId",
-            "--data-urlencode", "name=$title",
-            "--data-urlencode", "desc=$cfp",
-        );
-        unshift @curl, 'echo' if  $dryrun;
-        my $curl = run @curl, :out;
-        say $curl.out.lines;
+        if $cardid {
+            next unless $update;
+            request("PUT", "$cardsURL$cardid", $params, $dryrun);
+        } else {
+            request("POST", $cardsURL, $params, $dryrun);
+        }
     }
+}
+
+sub request($method, $url, $params, $dryrun) {
+    my $title = %$params<name>;
+    my $label = %$params<idLabels>;
+    if $dryrun {
+        say "$method $url $label $title";
+        return;
+    }
+
+    my $response;
+    if $method eq 'PUT' {
+        say "Updating '$title'";
+        $response = $ua.put($url, $params);
+    } else {
+        say "Creating '$title'";
+        $response = $ua.post($url, $params);
+    }
+    say $response.code;
 }
