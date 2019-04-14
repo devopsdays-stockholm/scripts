@@ -24,6 +24,7 @@ sub MAIN(
     Str :l(:$listid) = "5c811f27be32a548e9ba436b",
     Bool :u(:$update) = False,
     Bool :d(:$dryrun) = False,
+    Str :p(:$pattern) = '',
 ) {
     my @getCards = 'curl', '-s', "https://api.trello.com/1/list/$listid/cards?key=$apikey&token=$token";
     my $getCards = run @getCards, :out;
@@ -52,6 +53,9 @@ sub MAIN(
     my %new;
     for @$data -> %cfp {
         my $title = %cfp<title>;
+        if $pattern {
+            $title ~~ /$pattern/ or next;
+        }
         if %new{$title}++ {
             say "ignoring duplicate title '$title' in input data";
             next;
