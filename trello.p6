@@ -82,12 +82,16 @@ sub MAIN(
         *By: $author - $format*
         ### Tags
         $tags
+
         ### Abstract
         $abstract
+
         ### Description
         $description
+
         ### Notes
         $notes
+
         ### $author <<$email>>
         *$organization*
 
