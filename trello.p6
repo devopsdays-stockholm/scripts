@@ -30,22 +30,19 @@ sub MAIN(
     Bool :d(:$dryrun) = False,
     Str :p(:$pattern) = '',
 ) {
-    my @getCards = 'curl', '-s', "https://api.trello.com/1/list/$listid/cards?key=$apikey&token=$token";
-    my $getCards = run @getCards, :out;
-    my $existing = from-json($getCards.out.lines);
+    my $getCards = $ua.get("https://api.trello.com/1/list/$listid/cards?key=$apikey&token=$token");
+    my $existing = from-json($getCards.content);
     my %ids;
     for @$existing -> %cfp {
         my $title = %cfp<name>;
         die "duplicate title '$title' in existing data" if %ids{$title};
         %ids{$title} = '/' ~ %cfp<id>;
     }
-    my @getList = 'curl', '-s', "https://api.trello.com/1/list/$listid?key=$apikey&token=$token";
-    my $getList = run @getList, :out;
-    my $boardid = from-json($getList.out.lines)<idBoard>;
+    my $getList = $ua.get("https://api.trello.com/1/list/$listid?key=$apikey&token=$token");
+    my $boardid = from-json($getList.content)<idBoard>;
 
-    my @getLabels = 'curl', '-s', "https://api.trello.com/1/boards/$boardid/labels?key=$apikey&token=$token";
-    my $getLabels = run @getLabels, :out;
-    my $labels = from-json($getLabels.out.lines);
+    my $getLabels = $ua.get("https://api.trello.com/1/boards/$boardid/labels?key=$apikey&token=$token");
+    my $labels = from-json($getLabels.content);
     my %labels;
     for @$labels -> $label {
         my $name = $label<name> || next;
@@ -110,14 +107,14 @@ sub MAIN(
 
         if $cardid {
             next unless $update;
-            request("PUT", "$cardsURL$cardid", $params, $dryrun);
+            createorupdate("PUT", "$cardsURL$cardid", $params, $dryrun);
         } else {
-            request("POST", $cardsURL, $params, $dryrun);
+            createorupdate("POST", $cardsURL, $params, $dryrun);
         }
     }
 }
 
-sub request($method, $url, $params, $dryrun) {
+sub createorupdate($method, $url, $params, $dryrun) {
     my $title = %$params<name>;
     my $label = %$params<idLabels>;
     if $dryrun {
