@@ -25,29 +25,56 @@ sub MAIN(
     Str $infile where *.IO.f,
     NonEmptyStr :t(:$token)!,
     NonEmptyStr :a(:$apikey)!,
-    Str :l(:$listid) = "5c811f27be32a548e9ba436b",
+    Str :b(:$boardName) = "DevOpsDays Sthlm 2020 - Speakers",
+    Str :l(:$listName) = "^Proposals",
     Bool :u(:$update) = False,
     Bool :d(:$dryrun) = False,
     Str :p(:$pattern) = '',
 ) {
-    my $getCards = $ua.get("https://api.trello.com/1/list/$listid/cards?key=$apikey&token=$token");
-    my $existing = from-json($getCards.content);
-    my %ids;
-    for @$existing -> %cfp {
-        my $title = %cfp<name>;
-        die "duplicate title '$title' in existing data" if %ids{$title};
-        %ids{$title} = '/' ~ %cfp<id>;
+    my $getBoards = $ua.get("https://api.trello.com/1/members/me/boards?key=$apikey&token=$token");
+    my $boards = from-json($getBoards.content);
+    my $boardId;
+    for @$boards -> %board {
+        $boardId = %board<id> if %board<name> eq $boardName;
     }
-    my $getList = $ua.get("https://api.trello.com/1/list/$listid?key=$apikey&token=$token");
-    my $boardid = from-json($getList.content)<idBoard>;
+    unless $boardId {
+        note "Trello board with name '$boardName' not found; possible board names are:";
+        for @$boards -> %board {
+            note "  %board<name>";
+        }
+        exit 1;
+    }
 
-    my $getLabels = $ua.get("https://api.trello.com/1/boards/$boardid/labels?key=$apikey&token=$token");
+    my $getLists = $ua.get("https://api.trello.com/1/boards/$boardId/lists?key=$apikey&token=$token");
+    my $lists = from-json($getLists.content);
+    my ($primaryListId, %ids);
+    for @$lists -> %list {
+        my $listId = %list<id>;
+        $primaryListId = $listId if %list<name> ~~ /<$listName>/;
+
+        my $getCards = $ua.get("https://api.trello.com/1/list/$listId/cards?key=$apikey&token=$token");
+        my $existing = from-json($getCards.content);
+        for @$existing -> %cfp {
+            my $title = %cfp<name>;
+            die "duplicate title '$title' in existing data" if %ids{$title};
+            %ids{$title} = '/' ~ %cfp<id>;
+        }
+    }
+    unless $primaryListId {
+        note "primary list (with name matching '$listName') not found; possible list names are:";
+        for @$lists -> %list {
+            note "  %list<name>";
+        }
+        exit 1;
+    }
+
+    my $getLabels = $ua.get("https://api.trello.com/1/boards/$boardId/labels?key=$apikey&token=$token");
     my $labels = from-json($getLabels.content);
     my %labels;
-    for @$labels -> $label {
-        my $name = $label<name> || next;
+    for @$labels -> %label {
+        my $name = %label<name> || next;
         $name ~~ /^ (\d+)/;
-        %labels{$0} = $label<id> if $0;
+        %labels{$0} = %label<id> if $0;
     }
 
     my $data = from-json(slurp $infile);
@@ -79,32 +106,30 @@ sub MAIN(
         my $cardid = %ids{$title};
 
         my $cfp = qq:to/END/;
-        *By: $author - $format*
-        ### Tags
-        $tags
+            *By: $author - $format*
+            ### Tags
+            $tags
 
-        ### Abstract
-        $abstract
+            ### Abstract
+            $abstract
 
-        ### Description
-        $description
+            ### Description
+            $description
 
-        ### Notes
-        $notes
+            ### Notes
+            $notes
 
-        ### $author <<$email>>
-        *$organization*
+            ### $author <<$email>>
+            *$organization*
 
-        $bio
-        END
-        $cfp ~~ s:g/\n/\n/; # remove \r
+            $bio
+            END
+            $cfp ~~ s:g/\n/\n/; # remove \r
         $cfp ~~ s/ \s+ $ //; # remove trailing whitespace
 
         my $params = {
             key => $apikey,
             token => $token,
-            idList => $listid,
-            idLabels => $labelId,
             name => $title,
             desc => $cfp,
         };
@@ -113,6 +138,8 @@ sub MAIN(
             next unless $update;
             createorupdate("PUT", "$cardsURL$cardid", $params, $dryrun);
         } else {
+            $params<idList> = $primaryListId;
+            $params<idLabels> = $labelId;
             createorupdate("POST", $cardsURL, $params, $dryrun);
         }
     }
