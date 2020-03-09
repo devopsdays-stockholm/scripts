@@ -2,18 +2,16 @@
 #
 # create or update cards in a Trello board from a JSON file
 #
-# the default listid is for the CFP list on the DevOpsDays Sthlm Speakers board
-#
 # to download a JSON file for DevOpsDays Sthlm from Papercall, open
 # https://www.papercall.io/cfps/1986/submissions/download in a web
 # browser if you've got admin access to that Papercall event
 #
 # prerequisites are perl6, JSON::Tiny and api keys from https://trello.com/app-key
-# in debian (unstable): `apt install perl6 perl6-zef; zef install JSON::Tiny`
+# in debian (unstable): `apt install perl6 perl6-zef; zef install JSON::Fast`
 # or install from https://rakudo.org/files
 #
 
-use JSON::Tiny;
+use JSON::Fast;
 use HTTP::UserAgent;
 
 my %*SUB-MAIN-OPTS = :named-anywhere;
@@ -147,7 +145,7 @@ sub MAIN(
 
 sub createorupdate($method, $url, $params, $dryrun) {
     my $title = %$params<name>;
-    my $label = %$params<idLabels>;
+    my $label = %$params<idLabels> || '';
     if $dryrun {
         say "$method $url $label $title";
         return;
