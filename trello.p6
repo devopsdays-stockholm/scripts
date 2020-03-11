@@ -24,7 +24,7 @@ sub MAIN(
     NonEmptyStr :t(:$token)!,
     NonEmptyStr :a(:$apikey)!,
     Str :b(:$boardName) = "DevOpsDays Sthlm 2020 - Speakers",
-    Str :l(:$listName) = "^Proposals",
+    Str :l(:$listName) = "^Neutral",
     Bool :u(:$update) = False,
     Bool :d(:$dryrun) = False,
     Str :p(:$pattern) = '',
